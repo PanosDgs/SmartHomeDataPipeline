@@ -1,12 +1,12 @@
-# IoTBigData
+# IoT Smart Home Data Pipeline for Storage, Aggregation and Presentation
 
-Εργασία στο μάθημα της Ανάλυσης και Σχεδιασμού Πληροφοριακών Συστήματων του 9ου εξαμήνου ΗΜΜΥ ΕΜΠ.
+University project of Big Data subject - 9th semester of NTUA.
 
-Θέμα ΒΚ 1.7: IoT Live Streaming σύστημα
+Project BK 1.7: IoT Live Streaming System
 
 Mosquitto MQTT - Apache Spark - (Confluent Kafka) - MongoDB - Grafana
 
-Ομάδα 14
+Team 14
 
 Παναγιώτης Ντάγκας 0318018
 
