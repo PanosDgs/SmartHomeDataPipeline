@@ -8,6 +8,7 @@ topics_energy = ["IoT/energy/Airconditioning/HVAC1","IoT/energy/Airconditioning/
 topics_water = ["IoT/water/W1","IoT/water/Wtot"]
 topics_temp = ["IoT/temperature/TH1","IoT/temperature/TH2","IoT/movement/Mov1"]
 
+# Callback on receive. If message is received from any Energy topic of MQTT it is passed on raw energy Kafka topic
 def on_message(client, userdata, message):
     msg_payload = str(message.payload.decode("utf-8"))
     print("message received " , msg_payload)
@@ -23,6 +24,7 @@ def on_message(client, userdata, message):
     final_payload = json.dumps(to_send)
     kafka_producer1.produce(final_payload.encode('ascii'))
 
+# Callback on receive. If message is received from any Water topic of MQTT it is passed on raw water Kafka topic
 def on_message1(client, userdata, message):
     msg_payload = str(message.payload.decode("utf-8"))
     print("message received " , msg_payload)
@@ -41,6 +43,7 @@ def on_message1(client, userdata, message):
     final_payload = json.dumps(to_send)
     kafka_producer2.produce(final_payload.encode('ascii'))
 
+# Callback on receive. If message is received from any temperature topic of MQTT it is passed on raw temperature Kafka topic
 def on_message2(client, userdata, message):
     msg_payload = str(message.payload.decode("utf-8"))
     print("message received " , msg_payload)
@@ -56,6 +59,8 @@ def on_message2(client, userdata, message):
     final_payload = json.dumps(to_send)
     kafka_producer3.produce(final_payload.encode('ascii'))
 
+# MQTT clients for fetching the measurements
+
 client_energy = mqtt.Client("client1")
 client_energy.on_message=on_message 
 client_energy.connect("127.0.0.1")
@@ -67,6 +72,8 @@ client_water.connect("127.0.0.1",port=1884)
 client_temp = mqtt.Client("client3")
 client_temp.on_message=on_message2 
 client_temp.connect("127.0.0.1", port=1885)
+
+# Kafka clients for redirecting the raw measurements to Kafka topics
 
 kafka_client = KafkaClient(hosts="localhost:9092")
 kafka_energy = kafka_client.topics["raw_energy"]
