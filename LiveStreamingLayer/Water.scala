@@ -7,6 +7,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.streaming.OutputMode
 import java.sql.Timestamp 
 
+// User-Defined Aggregation Function for computing the daily difference. Measurements are windowed in 2-day pairs
+// and their difference is calculated.
 class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
     // Input Data Type Schema
     override def inputSchema: StructType = StructType(StructField("Value", DoubleType) :: Nil)
@@ -35,7 +37,8 @@ class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
 
     }
 
-    // Merge two partial aggregates
+    // Merge two partial aggregates - This is the part that actually calculates the difference. This works ONLY if the data
+    // are windowed in 2-day pairs.
     override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
         buffer1(0) = buffer2.getDouble(0) - buffer1.getDouble(0)
     }
@@ -46,7 +49,6 @@ class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
     }
 }
   
-    //val valueDiff = new ValueDifferenceUDAF()
     val brokerUrl = "tcp://127.0.0.1:1884"
 
     val topic = "IoT/water/Wtot"
@@ -59,7 +61,11 @@ class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
     
     spark.conf.set("spark.sql.session.timeZone", "UTC")
     import spark.implicits._
+
+    // Register the Value Difference UDAF
     spark.udf.register("ValDiff", new ValueDifferenceUDAF)
+
+    // Wtot measurement aggregation - daily difference
     val lines = spark.readStream
       .format("org.apache.bahir.sql.streaming.mqtt.MQTTStreamSourceProvider")
       .option("topic", topic)
@@ -76,8 +82,11 @@ class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
     val diff = new ValueDifferenceUDAF()
     val dfWithDailyDiff = raw_wtot.groupBy(window($"DateTime", "2 days", "1 day")).agg(round(diff(col("NumVal")),2).alias("daily_diff"))
     val wtotagg = dfWithDailyDiff.select(to_timestamp(date_sub((col("window").getItem("end")),1)).as("Day"), col("daily_diff"))
+
+    // A small cheat to not include the first simulated Day of measurement before the 2nd one has arrived.
     val aggDiffWtot = wtotagg.where(col("daily_diff")<150)
 
+    // W1 measurement aggregation
     val topic2 = "IoT/water/W1"
     val w1 = spark.readStream
       .format("org.apache.bahir.sql.streaming.mqtt.MQTTStreamSourceProvider")
@@ -91,6 +100,8 @@ class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
                             .withColumn("Val", $"payload".getItem(1))
                             .drop($"payload")
     
+    // Filter late events. 10 days before measurements are rejected, 2 days before are still valid.
+    // Late events are flagged for simulation purposes. In real environments a Watermark should be added to filter them.
     val late1 = raw_w11.where(col("Val").contains("f"))
     val late2 = late1.select(col("DateTime").cast("String").as("Rejected_Event"), regexp_replace(col("Val"), "f", "").as("Value"))
     val late_rejected = late2.select(col("Rejected_Event"), col("Value").cast("double").as("NumValue"))
@@ -99,6 +110,7 @@ class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
         window($"Rejected_Event", "10 minutes", "10 minutes")
     ).agg(sum($"NumValue").as("RejectedVal")).select((col("window").getItem("end").as("RejectedEvent")), $"RejectedVal")
     
+    // Raw data that do not contain late events.
     val raw_w12 = raw_w11.where(!col("Val").contains("f"))
     val raw_w1 = raw_w12.withColumn("NumVal", $"Val".cast("double")).drop("Val")
     val temp = raw_w1.withWatermark("DateTime", "3 days").groupBy(
@@ -108,6 +120,8 @@ class ValueDifferenceUDAF extends UserDefinedAggregateFunction {
     val aggDayw1 = temp.select((col("window").getItem("end")).as("Day"), $"Totalw1")
     val aggdayw1_final = aggDayw1.where(col("Totalw1") > 40)
 
+    // Write stream queries
+    // Late rejected events are directed to a different Kafka topic
     val query2 = aggdayw1_final.select(to_json(struct($"Day", $"Totalw1")).as("value"))
         .writeStream
         .format("kafka")

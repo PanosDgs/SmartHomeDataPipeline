@@ -6,7 +6,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.streaming.OutputMode
 import java.sql.Timestamp 
 
-
+// Schema structure for input data from Kafka
 val schema = StructType(Array(
       StructField("Day", TimestampType, true),
       StructField("Totalw1", DoubleType, true)
@@ -58,11 +58,15 @@ val aggtot = agg_tot_payload.withColumn("Day2",
 val aggdayw1_wtrmrk = aggdayw1.withWatermark("Day", "5 seconds")
 val aggtot_wtrmrk = aggtot.withWatermark("Day2", "5 seconds")
 
+// Sum of W1 daily measurements and Wtot measurement that comes ones a day are joined in the same DF based on the Day they
+// are measuring. 
 val joined_df = aggdayw1_wtrmrk.join(aggtot_wtrmrk, expr("""Day=Day2"""))
 
+// Water leakage is calculated as the difference of the 2 columns.
 val leakdf = joined_df.withColumn("LeakValue", $"daily_diff" - $"Totalw1")
 val leakfinal = leakdf.select($"Day", round($"LeakValue",2).as("LeakValue"))
 
+// The result is written to a Kafka topic for water leakage.
 val query = leakfinal.select(to_json(struct($"Day", $"LeakValue")).as("value"))
         .writeStream
         .format("kafka")

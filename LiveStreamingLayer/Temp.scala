@@ -18,7 +18,7 @@ import java.sql.Timestamp
     
     
     
-    //TH1
+    // TH1 measurement aggregation - daily average
 
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 
@@ -46,7 +46,7 @@ import java.sql.Timestamp
     val aggDayTH1 = temp.select((col("window").getItem("end")).as("Day"),$"TotalTH1")
 
 
-    //TH2
+    // TH2 measurement aggregation
 
     val topic2 = "IoT/temperature/TH2"
 
@@ -69,7 +69,7 @@ import java.sql.Timestamp
 
     val aggDayTH2 = temp2.select((col("window").getItem("end")).as("Day"),$"TotalTH2")
 
-    //Movement MOV1
+    // Movement MOV1 measurement aggregation
 
     val topic3 = "IoT/movement/Mov1"
 
@@ -93,8 +93,9 @@ import java.sql.Timestamp
     val aggDayMov = temp3.select((col("window").getItem("end")).as("Day"),$"TotalMov1")
 
 
-    //Write-Stream Queries
-
+    // Write-Stream Queries
+    // Write the aggregated values to topics in Kafka, port 9092, in append mode
+    
     val query1 = aggDayTH1.select(to_json(struct($"Day", $"TotalTH1")).as("value"))
         .writeStream
         .format("kafka")
